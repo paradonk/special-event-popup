@@ -93,6 +93,8 @@ class SEP_Admin {
 		<div class="wrap sep-admin-wrap">
 			<h1><?php esc_html_e( 'Special Event Popup', 'special-event-popup' ); ?></h1>
 
+			<?php $this->render_status_notice( $settings ); ?>
+
 			<form action="options.php" method="post">
 				<?php settings_fields( 'sep_settings_group' ); ?>
 
@@ -303,6 +305,68 @@ class SEP_Admin {
 			</form>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Render a status notice above the form showing whether the popup is
+	 * currently active and why, so admins are never confused by empty date fields.
+	 *
+	 * @param array $settings Plugin settings.
+	 */
+	private function render_status_notice( array $settings ) {
+		if ( empty( $settings['enabled'] ) ) {
+			echo '<div class="notice notice-warning inline"><p><strong>' . esc_html__( 'Popup Status: DISABLED', 'special-event-popup' ) . '</strong> &mdash; ' . esc_html__( 'Enable the popup below to start showing it.', 'special-event-popup' ) . '</p></div>';
+			return;
+		}
+
+		$start = trim( $settings['start_date'] );
+		$end   = trim( $settings['end_date'] );
+
+		if ( '' === $start && '' === $end ) {
+			echo '<div class="notice notice-success inline"><p><strong>' . esc_html__( 'Popup Status: ACTIVE', 'special-event-popup' ) . '</strong> &mdash; ' . esc_html__( 'No schedule is set. The popup will show on every visit until you disable it or set an End Date.', 'special-event-popup' ) . '</p></div>';
+			return;
+		}
+
+		try {
+			$timezone = wp_timezone();
+			$now      = new DateTimeImmutable( 'now', $timezone );
+			$fmt      = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+
+			$start_obj = '' !== $start ? new DateTimeImmutable( $start, $timezone ) : null;
+			$end_obj   = '' !== $end   ? new DateTimeImmutable( $end,   $timezone ) : null;
+
+			if ( $start_obj && $now < $start_obj ) {
+				/* translators: %s: formatted start date/time */
+				$msg = sprintf( esc_html__( 'Popup Status: SCHEDULED — Will become active on %s.', 'special-event-popup' ), esc_html( wp_date( $fmt, $start_obj->getTimestamp() ) ) );
+				echo '<div class="notice notice-info inline"><p><strong>' . $msg . '</strong></p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput
+				return;
+			}
+
+			if ( $end_obj && $now > $end_obj ) {
+				/* translators: %s: formatted end date/time */
+				$msg = sprintf( esc_html__( 'Popup Status: SCHEDULE ENDED — The schedule expired on %s. Update the dates or disable the popup.', 'special-event-popup' ), esc_html( wp_date( $fmt, $end_obj->getTimestamp() ) ) );
+				echo '<div class="notice notice-error inline"><p><strong>' . $msg . '</strong></p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput
+				return;
+			}
+
+			$parts = array();
+			if ( $start_obj ) {
+				/* translators: %s: formatted start date/time */
+				$parts[] = sprintf( esc_html__( 'from %s', 'special-event-popup' ), esc_html( wp_date( $fmt, $start_obj->getTimestamp() ) ) );
+			}
+			if ( $end_obj ) {
+				/* translators: %s: formatted end date/time */
+				$parts[] = sprintf( esc_html__( 'until %s', 'special-event-popup' ), esc_html( wp_date( $fmt, $end_obj->getTimestamp() ) ) );
+			}
+
+			$range = implode( ' ', $parts );
+			/* translators: %s: schedule range e.g. "from June 1 until June 30" */
+			$msg = sprintf( esc_html__( 'Popup Status: ACTIVE — Running %s.', 'special-event-popup' ), $range );
+			echo '<div class="notice notice-success inline"><p><strong>' . $msg . '</strong></p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput
+
+		} catch ( Exception $e ) {
+			echo '<div class="notice notice-warning inline"><p><strong>' . esc_html__( 'Popup Status: ACTIVE', 'special-event-popup' ) . '</strong></p></div>';
+		}
 	}
 
 	/**
